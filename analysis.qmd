@@ -1,4 +1,116 @@
 ---
 title: "Crypto Markets"
 author: "Greta Tillery"
+execute:
+  echo: false
 ---
+
+```{r}
+#| message: false
+library(tidyverse)
+library(arrow)
+```
+
+```{r}
+open_dataset("data/daily_prices.parquet")$schema
+```
+
+```{r}
+open_dataset("data/daily_prices.parquet") |>
+  collect() |>
+  slice_sample(n = 10) |>
+  as_tibble()
+```
+
+```{r}
+open_dataset("data/daily_prices.parquet") |>
+  filter(date_raw >= "2025-01-01") |>
+  group_by(coin_id) |>
+  summarise(avg_market_cap_usd = mean(market_cap_usd, na.rm = TRUE)) |>
+  arrange(desc(avg_market_cap_usd)) |>
+  collect()
+```
+
+```{r}
+#| cache: true
+prices <- open_dataset("data/daily_prices.parquet") |>
+  collect()
+metadata <- open_dataset("data/coin_metadata.parquet") |>
+  collect()
+categories <- open_dataset("data/categories.parquet") |>
+  collect()
+
+crypto <- prices |>
+  left_join(metadata, by = "coin_id") |>
+  left_join(select(categories, -description), by = "category_id") |>
+  mutate(date = ymd(date_raw))
+```
+
+```{r}
+metadata |>
+  mutate(launch_date_parsed = as.Date(lubridate::parse_date_time(
+    launch_date,
+    orders = c("B d, Y", "Y-m-d")
+  ))) |>
+  arrange(launch_date_parsed) |>
+  select(coin_id, coin_name, launch_date, launch_date_parsed)
+```
+
+```{r}
+crypto |>
+  filter(coin_id == "btc") |>
+  ggplot(aes(x = date, y = price_usd)) +
+  geom_line() +
+  labs(x = "Date", y = "Price (USD)", title = "Bitcoin Daily Price")
+```
+
+```{r}
+category_shares <- crypto |>
+  group_by(date, category_name) |>
+  summarise(category_market_cap = sum(market_cap_usd, na.rm = TRUE), .groups = "drop") |>
+  group_by(date) |>
+  mutate(category_share = category_market_cap / sum(category_market_cap)) |>
+  ungroup() |>
+  mutate(category_name = forcats::fct_reorder(
+    category_name,
+    category_market_cap,
+    .fun = mean
+  ))
+
+event_windows <- tibble(
+  event = c("Luna/UST crash", "FTX collapse"),
+  start = as.Date(c("2022-05-07", "2022-11-08")),
+  end = as.Date(c("2022-05-12", "2022-11-11")),
+  midpoint = as.Date(c("2022-05-09", "2022-11-09"))
+)
+
+ggplot(category_shares, aes(x = date, y = category_share, fill = category_name)) +
+  geom_rect(
+    data = event_windows,
+    aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+    inherit.aes = FALSE,
+    fill = "grey35",
+    alpha = 0.18
+  ) +
+  geom_area() +
+  geom_label(
+    data = event_windows,
+    aes(x = midpoint, y = 1.03, label = event),
+    inherit.aes = FALSE,
+    size = 3,
+    label.size = 0,
+    fill = "white"
+  ) +
+  labs(
+    title = "Crypto Market Share by Category",
+    subtitle = "Each band shows a category's share of total cryptocurrency market capitalization per day.",
+    x = NULL,
+    y = "Share of total market capitalization",
+    fill = "Category",
+    caption = "Source: Cryptocurrency daily market data and category metadata supplied with this analysis."
+  ) +
+  scale_fill_viridis_d(option = "D", end = 0.9) +
+  scale_y_continuous(labels = scales::label_percent()) +
+  coord_cartesian(ylim = c(0, 1), clip = "off") +
+  theme(plot.margin = margin(t = 24, r = 8, b = 8, l = 8))
+```
