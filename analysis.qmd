@@ -12,10 +12,12 @@ library(arrow)
 ```
 
 ```{r}
+#| include: false
 open_dataset("data/daily_prices.parquet")$schema
 ```
 
 ```{r}
+#| include: false
 open_dataset("data/daily_prices.parquet") |>
   collect() |>
   slice_sample(n = 10) |>
@@ -23,6 +25,7 @@ open_dataset("data/daily_prices.parquet") |>
 ```
 
 ```{r}
+#| include: false
 open_dataset("data/daily_prices.parquet") |>
   filter(date_raw >= "2025-01-01") |>
   group_by(coin_id) |>
@@ -47,6 +50,7 @@ crypto <- prices |>
 ```
 
 ```{r}
+#| include: false
 metadata |>
   mutate(launch_date_parsed = as.Date(lubridate::parse_date_time(
     launch_date,
@@ -98,7 +102,7 @@ ggplot(category_shares, aes(x = date, y = category_share, fill = category_name))
     aes(x = midpoint, y = 1.03, label = event),
     inherit.aes = FALSE,
     size = 3,
-    label.size = 0,
+    linewidth = 0,
     fill = "white"
   ) +
   labs(
